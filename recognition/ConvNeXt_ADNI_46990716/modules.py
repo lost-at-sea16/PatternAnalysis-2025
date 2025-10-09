@@ -1,0 +1,4 @@
+"""
+Contains components of model
+"""
+
