@@ -7,8 +7,11 @@ import torchvision.transforms as transforms
 import os
 from PIL import Image
 
-train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
-test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
+#train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
+#test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
+
+train_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\train"
+test_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\test"
 
 class ADNIDataset(Dataset):
     """ADNI dataset."""
@@ -52,5 +55,17 @@ class ADNIDataset(Dataset):
             image = self.transform(image)
 
         return image, label
+    
 
+
+transform = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+])
+
+
+def train_dataloader(batch_size):
+    dataset = ADNIDataset(root_dir=train_set_location, transform=transform)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
