@@ -7,11 +7,11 @@ import torchvision.transforms as transforms
 import os
 from PIL import Image
 
-#train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
-#test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
+train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
+test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
 
-train_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\train"
-test_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\test"
+# train_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\train"
+# test_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\test"
 
 class ADNIDataset(Dataset):
     """ADNI dataset."""
@@ -27,9 +27,8 @@ class ADNIDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
 
-        self.samples = []
         self.classes = ["AD", "NC"]
-        self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
+        self.class_to_idx = {"NC":0, "AD":1}
 
         self.image_paths = []
         self.labels = []
@@ -38,17 +37,18 @@ class ADNIDataset(Dataset):
             class_path = os.path.join(root_dir, class_name)
             
             for img_name in os.listdir(class_path):
-                self.image_paths.append(os.path.join(class_path, img_name))
-                self.labels.append(self.class_to_idx[class_name])
+                if img_name.lower().endswith(('.jpg', '.jpeg')):
+                    self.image_paths.append(os.path.join(class_path, img_name))
+                    self.labels.append(self.class_to_idx[class_name])
     
     def __len__(self):
-        return len(self.samples)
+        return len(self.image_paths)
     
     def __getitem__(self, idx):
         
 
         img_path = self.image_paths[idx]
-        image = Image.open(img_path).convert("RGB")
+        image = Image.open(img_path).convert("L")
         label = self.labels[idx]
 
         if self.transform:
@@ -58,14 +58,24 @@ class ADNIDataset(Dataset):
     
 
 
-transform = transforms.Compose([
-    transforms.Resize((256, 256)),
+transform_train = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    
+    transforms.Normalize(mean=[0.5], std=[0.5]),
 ])
 
+transform_test = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+])
 
 def train_dataloader(batch_size):
-    dataset = ADNIDataset(root_dir=train_set_location, transform=transform)
+    dataset = ADNIDataset(root_dir=train_set_location, transform=transform_train)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+def test_dataloader(batch_size):
+    dataset = ADNIDataset(root_dir=test_set_location, transform=transform_test)
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
