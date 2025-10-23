@@ -55,6 +55,7 @@ def training(model, train_loader):
     end = time.time()
     elapsed = end-start
     print("Training took " + str(elapsed) + "secs or " + str(elapsed/60) + " mins in total")
+    return model
 
 
 def test(model, test_loader):
@@ -82,6 +83,7 @@ def test(model, test_loader):
     end = time.time()
     elapsed = end-start
     print("Testing took " + str(elapsed) + "secs or " + str(elapsed/60) + " mins")
+    return model
 
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

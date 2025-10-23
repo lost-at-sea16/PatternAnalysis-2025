@@ -7,11 +7,14 @@ import torchvision.transforms as transforms
 import os
 from PIL import Image
 
-train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
-test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
+# train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
+# test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
 
 # train_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\train"
 # test_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\test"
+
+train_set_location = r"/home/groups/comp3710/ADNI/AD_NC/train"
+test_set_location = r"/home/groups/comp3710/ADNI/AD_NC/test"
 
 class ADNIDataset(Dataset):
     """ADNI dataset."""
@@ -58,17 +61,35 @@ class ADNIDataset(Dataset):
     
 
 
+# transform_train = transforms.Compose([
+#     transforms.Resize((224, 224)),
+#     transforms.RandomHorizontalFlip(),
+#     transforms.ToTensor(),
+    
+#     transforms.Normalize(mean=[0.5], std=[0.5]),
+# ])
+
+# transform_test = transforms.Compose([
+#     transforms.Resize((224, 224)),
+#     transforms.ToTensor(),
+# ])
+
 transform_train = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(degrees=10),
+    transforms.ColorJitter(brightness=0.1, contrast=0.1),
+    transforms.RandomAffine(degrees=5, translate=(0.02, 0.02), scale=(0.95, 1.05)),
+    transforms.RandomResizedCrop(size=224, scale=(0.9, 1.1)),
     transforms.ToTensor(),
-    
+
     transforms.Normalize(mean=[0.5], std=[0.5]),
 ])
 
 transform_test = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5], std=[0.5]),
 ])
 
 def train_dataloader(batch_size):
