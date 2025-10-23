@@ -144,3 +144,6 @@ class LayerNorm(nn.Module):
 
 def convnext_tiny():
     return ConvNeXt(in_chans=1, num_classes=2)
+
+def covnext_small():
+    return ConvNeXt(in_chans=1, num_classes=2, depths = [3, 3, 27, 3], dims = [96, 192, 384, 768], drop_path_rate=0., layer_scale_init_value=1e-6, head_init_scale=1.)

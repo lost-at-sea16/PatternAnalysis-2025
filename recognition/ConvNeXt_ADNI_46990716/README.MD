@@ -5,8 +5,13 @@
 Student Number: 46990716
 Student Name: Sophia Gleeson
 
-## Table of Contents
+## Table of contents
 
+1. [Introduction](#introduction)
+2. [Dependencies](#dependencies)
+3. [Model Description](#model-description)
+4. [Usage](#usage)
+5. [Dataset](#dataset)
 
 ## Introduction
 
@@ -14,16 +19,16 @@ This project aims to classify Alzheimer’s disease (NC and AD) of the ADNI brai
 
 ## Dependencies
 
-This project requires the following libraries and dependencies:
+This project was run with the following libraries and dependencies:
 
-- **Python** : 
-- **Pytorch**
-- **torchvision**
+- **Python** : 3.9.23
+- **Pytorch** : 2.8.0
+- **torchvision** : 0.23.0
+- **numpy** : 2.0.2
+- **timm** : 1.0.20
+- **tqdm** : 4.67.1
 
 ## Model Description
-
-### Model Overview
-
 
 ## Usage
 
