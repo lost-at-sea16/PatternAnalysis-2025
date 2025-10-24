@@ -2,10 +2,11 @@
 Contains dataloader for loading and preprocessing data
 """
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split, Subset
 import torchvision.transforms as transforms
 import os
 from PIL import Image
+import timm.data.transforms_factory as transforms_factory
 
 # train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
 # test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
@@ -100,3 +101,24 @@ def test_dataloader(batch_size):
     dataset = ADNIDataset(root_dir=test_set_location, transform=transform_test)
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
+
+
+def split_train(batch_size, val_split=0.2, seed=60):  
+    dataset = ADNIDataset(root_dir=train_set_location, transform=transform_train)
+    train_size = int(len(dataset) * (1 - val_split))
+    val_size = len(dataset) - train_size
+    generator = torch.Generator().manual_seed(seed)
+    
+    train_dataset, _ = random_split(dataset, [train_size, val_size], generator=generator)
+
+    return DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+def split_val(batch_size, val_split=0.2, seed=60):  
+    dataset = ADNIDataset(root_dir=train_set_location, transform=transform_test)
+    train_size = int(len(dataset) * (1 - val_split))
+    val_size = len(dataset) - train_size
+    generator = torch.Generator().manual_seed(seed)
+    
+    _, val_dataset = random_split(dataset, [train_size, val_size], generator=generator)
+
+    return DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
