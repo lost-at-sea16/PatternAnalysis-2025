@@ -7,23 +7,29 @@ import torchvision.transforms as transforms
 import os
 from PIL import Image
 import timm.data.transforms_factory as transforms_factory
+import random
 
-# train_set_location = r"H:\comp3710\ADNI\AD_NC\train"
-# test_set_location = r"H:\comp3710\ADNI\AD_NC\test"
-
-# train_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\train"
-# test_set_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\ADNI\AD_NC\test"
 
 train_set_location = r"/home/groups/comp3710/ADNI/AD_NC/train"
 test_set_location = r"/home/groups/comp3710/ADNI/AD_NC/test"
 
 class ADNIDataset(Dataset):
-    """ADNI dataset."""
+    """
+    ADNI PyTorch Dataset for loading 2D MRI image slices.
+
+    This dataset handles images categorized as Alzheimer's disease (AD) and normal control (NC), 
+    indexing images based on their folder structure.
+    It returns images as grayscale (L mode) PIL objects or transformed Tensors.
+    """
+
 
     def __init__(self, root_dir, transform=None):
         """
+        Initializes the ADNI Dataset by indexing all image files.
+
         Args:
-            root_dir (string): Directory with the images
+            root_dir (string): Directory containing the images. Path should be in the structure
+                    ~/ADNI/AD_NC/train or ~/ADNI/AD_NC/test
             transform (callable, optional): Optional transform to be applied on a sample
 
         https://apxml.com/courses/pytorch-for-tensorflow-developers/chapter-3-pytorch-data-loading-for-tf-users/custom-datasets-pytorch
@@ -61,20 +67,7 @@ class ADNIDataset(Dataset):
         return image, label
     
 
-
-# transform_train = transforms.Compose([
-#     transforms.Resize((224, 224)),
-#     transforms.RandomHorizontalFlip(),
-#     transforms.ToTensor(),
-    
-#     transforms.Normalize(mean=[0.5], std=[0.5]),
-# ])
-
-# transform_test = transforms.Compose([
-#     transforms.Resize((224, 224)),
-#     transforms.ToTensor(),
-# ])
-
+# transforms used for the train dataset
 transform_train = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.RandomHorizontalFlip(),
@@ -83,10 +76,10 @@ transform_train = transforms.Compose([
     transforms.RandomAffine(degrees=5, translate=(0.02, 0.02), scale=(0.95, 1.05)),
     transforms.RandomResizedCrop(size=224, scale=(0.9, 1.1)),
     transforms.ToTensor(),
-
     transforms.Normalize(mean=[0.5], std=[0.5]),
 ])
 
+# transforms used for the test dataset
 transform_test = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -94,10 +87,28 @@ transform_test = transforms.Compose([
 ])
 
 def train_dataloader(batch_size):
+    """
+    Creates a PyTorch DataLoader for the train set of the ADNI dataset
+
+    Args:
+        batch_size (int): Number of samples per batch
+
+    Returns:
+        train dataloader (Dataloader): Dataloader for the train set
+    """
     dataset = ADNIDataset(root_dir=train_set_location, transform=transform_train)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 def test_dataloader(batch_size):
+    """
+    Creates a PyTorch DataLoader for the test set of the ADNI dataset
+
+    Args:
+        batch_size (int): Number of samples per batch
+
+    Returns:
+        test dataloader (Dataloader): Dataloader for the test set
+    """
     dataset = ADNIDataset(root_dir=test_set_location, transform=transform_test)
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
