@@ -2,7 +2,7 @@
 Contains source code for training, validating, testing and saving the model
 """
 
-from dataset import train_dataloader, test_dataloader, split_train, split_val
+from dataset import train_dataloader, test_dataloader, split_train, split_val, get_train_and_val
 from modules import convnext_tiny, covnext_small 
 import torch
 import torch.nn as nn
@@ -14,26 +14,33 @@ import time
 import wandb
 import argparse
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+from sklearn.metrics import classification_report
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-c",)
+parser.add_argument("-n", type=int)
+parser.add_argument("-l", type=float)
+parser.add_argument("-b", type=int)
+parser.add_argument("-w", type=float)
+parser.add_argument("-s", type=int)
+parser.add_argument("-m", type=float)
+parser.add_argument("-d", type=float)
+
+# -n 60 -l 0.0003 -b 128 -w 0.05 -s 5 -m 0.05 -d 0.0
 
 opts = parser.parse_args()
-criterion = opts.c
 
 
 
 
 config = {
-    "num_epochs": 10,
-    "learning_rate": 1e-3,
-    "batch_size": 64,
-    "weight_decay": 0.05,
-    "architecture": "ConvNeXt-S_default",
-    "criterion": criterion,
-    "scheduler": 2,
-    "smoothing":0.1,
-    "drop_path_rate":0.1
+    "num_epochs": opts.n,
+    "learning_rate": opts.l,
+    "batch_size": opts.b,
+    "weight_decay": opts.w,
+    "scheduler": opts.s,
+    "smoothing": opts.m,
+    "drop_path_rate":opts.d,
+    "criterion": opts.c,
 }
 
 num_epochs = config["num_epochs"]
@@ -42,34 +49,31 @@ batch_size = config["batch_size"]
 weight_decay = config["weight_decay"]
 milestone = config["scheduler"]
 
-if criterion == "soft":
-    crit = SoftTargetCrossEntropy()
-elif criterion == "label":
-    crit = LabelSmoothingCrossEntropy(smoothing=config["smoothing"])
-else:
-    crit = nn.CrossEntropyLoss()
 
-min_lr = 1e-6 
+final_predictions = []
+final_labels = []
 
 
 def training(model, train_loader, val_loader):
     """
     
     """
-    criterion = crit
+    criterion = LabelSmoothingCrossEntropy(smoothing=config["smoothing"])
     
-
+    
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=weight_decay)
 
     #sched_linear = optim.lr_scheduler.LinearLR(optimizer)
     #sched_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs/2)
-    sched_linear = optim.lr_scheduler.LinearLR(optimizer, start_factor=0.001, total_iters=milestone)
-    sched_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs - milestone, eta_min=min_lr)
+    sched_linear = optim.lr_scheduler.LinearLR(optimizer)
+    sched_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     scheduler = optim.lr_scheduler.SequentialLR(optimizer, schedulers=[sched_linear, sched_cosine], milestones=[milestone])
     
     total_step = len(train_loader)
 
     losses = []
+
+    #ema = torch.optim.swa_utils.AveragedModel(model)
 
     
     print("> Training")
@@ -96,6 +100,7 @@ def training(model, train_loader, val_loader):
 
         
         avg_loss = epoch_loss / total_step
+        #ema.update_parameters(model)
         
         print(f"📈 Epoch {epoch+1}/{num_epochs} Complete: Avg Loss = {avg_loss:.4f}")
 
@@ -128,19 +133,22 @@ def training(model, train_loader, val_loader):
     end = time.time()
     elapsed = end-start
     print("Training took " + str(elapsed) + "secs or " + str(elapsed/60) + " mins in total")
-    return model
+    return model, optimizer
 
 
 def test(model, test_loader):
     """
     
     """
-    print("testing")
+    
+
+    print("Testing")
     start = time.time()
     model.eval()
     with torch.no_grad():
         correct = 0
         total = 0
+
         for i, (images, labels) in enumerate(test_loader):
             images = images.to(device)
             labels = labels.to(device)
@@ -148,8 +156,16 @@ def test(model, test_loader):
             #forward pass
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
+            
+            final_predictions.extend(predicted.cpu().numpy()) 
+            final_labels.extend(labels.cpu().numpy())
+
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+
+            
+
+
 
         print("Test accuracy: {} %".format(100 * correct/ total))
         wandb.log({
@@ -162,15 +178,31 @@ def test(model, test_loader):
     return model
 
 
+def save_model(model, optimizer, filename="convnext_best.pth"):
+    """
+    Saves the model's state dictionary and optimizer state.
+    """
+    print(f"\nSaving model to {filename}...")
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'config': config 
+    }, filename)
+    print("Model saved successfully! ✅")
+
+
+# ========================================================================================
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Device: {device}")
+print(device)
 
 
 
 test_loader = test_dataloader(batch_size)
-val_loader = split_val(batch_size)
-train_loader = split_train(batch_size)
+# val_loader = split_val(batch_size)
+# train_loader = split_train(batch_size)
+
+train_loader, val_loader = get_train_and_val(batch_size=batch_size)
 
 wandb.init(
     entity="sophia-gleeson-the-university-of-queensland",
@@ -183,5 +215,12 @@ model = covnext_small(config["drop_path_rate"]).to(device)
 
 wandb.watch(model, log='all', log_freq=50)
 
-model = training(model, train_loader, val_loader)
+model, optimizer = training(model, train_loader, val_loader)
 model = test(model, test_loader)
+
+save_model(model, optimizer, filename="convnext_final_model_patients.pth")
+
+# final_labels = torch.cat(label).cpu().numpy()
+# final_predictions = torch.cat(predictions).cpu().numpy()
+
+print(classification_report(final_labels, final_predictions, target_names=["NC", "AD"]))
