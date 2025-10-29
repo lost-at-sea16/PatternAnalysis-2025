@@ -1,5 +1,5 @@
 """
-Contains components of model
+Contains components of the ConvNeXt model architecture
 """
 import torch
 import torch.nn as nn
@@ -28,6 +28,15 @@ class Block(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
     def forward(self, x):
+        """
+        Forward pass for the ConvNeXt block
+
+        Args:
+            x (Tensor): Input tensor of shape (N, C, H, W)
+        
+        Returns:
+            Tensor: output tensor of shape (N, C, H, W)
+        """
         input = x
         x = self.dwconv(x)
 
@@ -97,17 +106,38 @@ class ConvNeXt(nn.Module):
         self.head.bias.data.mul_(head_init_scale)
 
     def _init_weights(self, m):
+        """
+        Initialises weights using truncated normal distributions and biases to zero for convolutional and linear layers
+        """
         if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=.02)
             nn.init.constant_(m.bias, 0)
 
     def forward_features(self, x):
+        """
+        Propagates input through the model's feature extraction stages and applies Global Average Pooling
+
+        Args:
+            x (Tensor): Input tensor of shape (N, C, H, W)
+
+        Returns:
+            Tensor: Feature vector of shape (N,C) after GAP and final norm
+        """
         for i in range(4):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
         return self.norm(x.mean([-2, -1])) # global average pooling, (N, C, H, W) -> (N, C)
 
     def forward(self, x):
+        """
+        Full forward pass for classification
+
+        Args:
+            x (Tensor): Input tensor of shape (N, C, H, W)
+
+        Returns:
+            Tensor: output (logits) of shape (N, num_classes)
+        """
         x = self.forward_features(x)
         x = self.head(x)
         return x
@@ -118,6 +148,11 @@ class LayerNorm(nn.Module):
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with 
     shape (batch_size, height, width, channels) while channels_first corresponds to inputs 
     with shape (batch_size, channels, height, width).
+
+    ArgsL
+        normalised_shape (int): the number of features (channels) to normalise
+        eps (float): a value added to the denominator for numerical stablilty. Default=1e-6
+        data_format (str): The input dataformat, either "channels_last" or "channels_first". Default="channels_last"
     """
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
         super().__init__()
@@ -130,20 +165,51 @@ class LayerNorm(nn.Module):
         self.normalized_shape = (normalized_shape, )
     
     def forward(self, x):
+        """
+        Applies Layer Normalisation based on the specified data format
+
+        Args:
+            x (Tensor): Input tensor
+
+        Returns:
+            Tensor: Normalised output tensor
+        """
         if self.data_format == "channels_last":
+            # uses pytorch's layerNorm for channels_last (normalisation over the last dimension)
             return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         
-        
-
         elif self.data_format == "channels_first":
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
+            # Manual calculation for normalisation over the channel dimension C=1
+            u = x.mean(1, keepdim=True)     # calculate mean across the channel dimension
+            s = (x - u).pow(2).mean(1, keepdim=True)    # calculate variance 
+            x = (x - u) / torch.sqrt(s + self.eps)  # normalise
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
             return x
 
 def convnext_tiny():
+    """
+    Creates a ConvNeXt-Tiny model instance.
+
+    Args:
+        in_chans (int): Number of input channels. Default: 1.
+        num_classes (int): Number of output classes. Default: 2.
+    
+    Returns:
+        ConvNeXt: The initialized ConvNeXt-Tiny model.
+    """
     return ConvNeXt(in_chans=1, num_classes=2)
 
 def covnext_small(drop_path_rate):
+    """
+    Creates a ConvNeXt-Small model instance.
+    
+    This configuration uses depths=[3, 3, 27, 3] and dims=[96, 192, 384, 768].
+    It is configured for 1 input channel (grayscale) and 2 output classes (AD/NC) to match the ADNI dataset context.
+
+    Args:
+        drop_path_rate (float): Stochastic depth rate.
+        
+    Returns:
+        ConvNeXt: The initialized ConvNeXt-Small model.
+    """
     return ConvNeXt(in_chans=1, num_classes=2, depths = [3, 3, 27, 3], dims = [96, 192, 384, 768], drop_path_rate=drop_path_rate, layer_scale_init_value=1e-6, head_init_scale=1.)
