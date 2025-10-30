@@ -6,9 +6,8 @@ from torch.utils.data import DataLoader, Dataset, random_split, Subset
 import torchvision.transforms as transforms
 import os
 from PIL import Image
-import timm.data.transforms_factory as transforms_factory
 import random
-
+import re
 
 train_set_location = r"/home/groups/comp3710/ADNI/AD_NC/train"
 test_set_location = r"/home/groups/comp3710/ADNI/AD_NC/test"
@@ -133,3 +132,68 @@ def split_val(batch_size, val_split=0.2, seed=60):
     _, val_dataset = random_split(dataset, [train_size, val_size], generator=generator)
 
     return DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+
+def split_dataset_by_patient(dataset, validation_split=0.2, random_seed=60):
+    """
+    Splits the test dataset into a test and validation set at patient level
+
+    Args:
+        dataset
+    """
+
+    patient_id_pattern = re.compile(r"^(\d+)_.*")
+
+    patient_indicies = {}
+
+    for i in range(len(dataset)):
+        path = dataset.image_paths[i]
+        filename = os.path.basename(path)
+
+        match = patient_id_pattern.match(filename)
+        if match:
+            patient_id = match.group(1)
+            if patient_id not in patient_indicies:
+                patient_indicies[patient_id] = []
+            
+            patient_indicies[patient_id].append(i)
+        else:
+            # file doesn't match the expected format -> skip
+            continue
+    
+    patient_ids = list(patient_indicies.keys())
+    random.seed(random_seed)
+    random.shuffle(patient_ids) # Shuffle the list of unique patient IDs
+
+    num_val_patients = int(len(patient_ids) * validation_split)
+    
+    val_patient_ids = patient_ids[:num_val_patients]
+    test_patient_ids = patient_ids[num_val_patients:]
+    
+    test_indices = []
+    val_indices = []
+
+    for id in test_patient_ids:
+        test_indices.extend(patient_indicies[id])
+
+    for id in val_patient_ids:
+        val_indices.extend(patient_indicies[id])
+
+    test_subset = Subset(dataset, test_indices)
+    val_subset = Subset(dataset, val_indices)
+
+    print(f"Total unique patients: {len(patient_ids)}")
+    print(f"Train patients: {len(test_patient_ids)} ({len(test_subset)} slices)")
+    print(f"Validation patients: {len(val_patient_ids)} ({len(val_subset)} slices)")
+    
+    return test_subset, val_subset
+
+def get_test_and_val(batch_size, val_split=0.2, seed=60):
+    dataset = ADNIDataset(root_dir=test_set_location, transform=transform_test)
+
+    test_subset, val_subset = split_dataset_by_patient(dataset, val_split)
+
+    test_loader = DataLoader(test_subset, batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
+
+    return test_loader, val_loader
