@@ -2,7 +2,7 @@
 Contains source code for training, validating, testing and saving the model
 """
 
-from dataset import train_dataloader, test_dataloader, split_train, split_val, get_test_and_val
+from dataset import train_dataloader, test_dataloader, split_train, split_val, get_train_and_val
 from modules import convnext_tiny, covnext_small 
 import torch
 import torch.nn as nn
@@ -41,7 +41,6 @@ config = {
     "scheduler": opts.s,
     "smoothing": opts.m,
     "drop_path_rate":opts.d,
-    "criterion": opts.c,
 }
 
 num_epochs = config["num_epochs"]
@@ -53,10 +52,10 @@ milestone = config["scheduler"]
 
 final_predictions = []
 final_labels = []
-avg_losses = []
-accuracies = []
+train_losses = []
 val_accuracies = []
 val_losses = []
+
 
 
 def training(model, train_loader, val_loader):
@@ -65,23 +64,19 @@ def training(model, train_loader, val_loader):
     """
     criterion = LabelSmoothingCrossEntropy(smoothing=config["smoothing"])
     
-    
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=weight_decay)
 
-    #sched_linear = optim.lr_scheduler.LinearLR(optimizer)
-    #sched_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs/2)
     sched_linear = optim.lr_scheduler.LinearLR(optimizer)
     sched_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     scheduler = optim.lr_scheduler.SequentialLR(optimizer, schedulers=[sched_linear, sched_cosine], milestones=[milestone])
     
     total_step = len(train_loader)
-    
+
     print("> Training")
     start = time.time() 
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0
-        val_loss = 0
         for i, (images, labels) in enumerate(train_loader):
             images = images.to(device)
             labels = labels.to(device)
@@ -89,10 +84,6 @@ def training(model, train_loader, val_loader):
             #forward pass
             outputs = model(images)
             loss = criterion(outputs, labels)
-
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
 
             #backward and optimise
             optimizer.zero_grad()
@@ -105,8 +96,7 @@ def training(model, train_loader, val_loader):
 
         
         avg_loss = epoch_loss / total_step
-        #ema.update_parameters(model)
-        avg_losses.append(avg_loss)
+        train_losses.append(avg_loss)
         
         print(f"📈 Epoch {epoch+1}/{num_epochs} Complete: Avg Loss = {avg_loss:.4f}")
 
@@ -116,17 +106,21 @@ def training(model, train_loader, val_loader):
         with torch.no_grad():
             correct = 0
             total = 0
+            val_loss = 0
             for i, (images, labels) in enumerate(val_loader):
                 images = images.to(device)
                 labels = labels.to(device)
 
-               #forward pass
+                #forward pass
                 outputs = model(images)
+                
                 loss = criterion(outputs, labels)
+                val_loss += loss.item()
+                
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
-                val_loss += loss.item()
+                
 
             print("Validation accuracy: {} %".format(100 * correct/ total))
             wandb.log({
@@ -138,11 +132,9 @@ def training(model, train_loader, val_loader):
         avg_val_loss = val_loss / total_step
 
         val_losses.append(avg_val_loss)
+        val_accuracies.append(100*correct/ total)
         
-
-
-
-    
+   
     end = time.time()
     elapsed = end-start
     print("Training took " + str(elapsed) + "secs or " + str(elapsed/60) + " mins in total")
@@ -153,8 +145,6 @@ def test(model, test_loader):
     """
     
     """
-    
-
     print("Testing")
     start = time.time()
     model.eval()
@@ -175,10 +165,6 @@ def test(model, test_loader):
 
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-
-            
-
-
 
         print("Test accuracy: {} %".format(100 * correct/ total))
         wandb.log({
@@ -201,7 +187,7 @@ def save_model(model, optimizer, filename="convnext_best.pth"):
         'optimizer_state_dict': optimizer.state_dict(),
         'config': config 
     }, filename)
-    print("Model saved successfully! ✅")
+    print("Model saved successfully!")
 
 
 # ========================================================================================
@@ -211,16 +197,14 @@ print(device)
 
 
 
-train_loader = test_dataloader(batch_size)
-# val_loader = split_val(batch_size)
-# train_loader = split_train(batch_size)
+train_loader = train_dataloader(batch_size)
 
-test_loader, val_loader = get_test_and_val(batch_size=batch_size)
+test_loader, val_loader = get_train_and_val(batch_size=batch_size)
 
 wandb.init(
     entity="sophia-gleeson-the-university-of-queensland",
-    project="29-10", 
-    config=config, 
+    project="29-10", # Set your project name
+    config=config, # Log the hyperparameters
     reinit=True)
 
 
@@ -244,41 +228,22 @@ plt.close()
 
 # save loss graph
 plt.figure()
-plt.plot(avg_losses, label="Training loss")
+plt.plot(train_losses, label="Training loss")
 plt.plot(val_losses, label="Validation Loss")
 plt.xlabel("Epoch")
-plt.ylabel("Training loss & accuracy")
-plt.title("Training loss and accuracy versus epochs")
+plt.ylabel("Training & Validation loss")
+plt.title("Training and Validation versus epochs")
 plt.legend()
 plt.savefig("train_val_loss.png")
 plt.close()
 
 
-
-# save accuracy graph
+# save validation accuracy graph
 plt.figure()
-plt.plot(accuracies, label="Training Accuracy")
 plt.plot(val_accuracies, label="Validation Accuracy")
 plt.xlabel("Epoch")
-plt.ylabel("Training loss & accuracy")
-plt.title("Training and Validation accuracy versus epochs")
-plt.legend()
-plt.savefig("train_val_accuracy.png")
+plt.ylabel("Accuracy")
+plt.title("Validation accuracy versus epochs")
+plt.savefig("val_accuracy.png")
 plt.close()
 
-
-# save ROC curve
-fpr, tpr, _ = roc_curve(final_labels, final_predictions)
-roc_auc = auc(fpr, tpr)
-
-plt.figure()
-plt.plot(fpr, tpr, color='blue', lw=2, label=f'ROC curve (AUC = {roc_auc:.3f})')
-plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('ROC Curve (AD vs NC)')
-plt.legend(loc="lower right")
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("ROC.png")
-plt.close()
