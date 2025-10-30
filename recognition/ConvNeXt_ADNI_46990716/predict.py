@@ -82,6 +82,120 @@ def split_dataset_by_patient(dataset):
     print(f"Split into {len(patient_datasets)} patients.")
     return patient_datasets, patient_ids
 
+def evaluate_per_patient(model, patient_datasets, patient_ids, device, batch_size=128):
+    """
+    Evaluate model performance per patient by averaging slice predictions,
+    and compute ROC + AUC for AD vs NC classification.
+
+    Args:
+        model: trained PyTorch model
+        patient_datasets (list[Subset]): per-patient datasets
+        patient_ids (list[str]): corresponding patient IDs
+        device: torch device
+        batch_size (int): dataloader batch size
+        log_to_wandb (bool): whether to log metrics and plots to Weights & Biases
+
+    Returns:
+        results (dict): {patient_id: {"true": int, "pred": int, "prob": float}}
+        metrics (dict): accuracy, precision, recall, f1, auc
+    """
+    model.eval()
+    results = {}
+
+    all_true = []
+    all_pred = []
+    all_prob = []
+
+    with torch.no_grad():
+        for pid, ds in zip(patient_ids, patient_datasets):
+            loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
+            probs = []
+            labels = []
+
+            for images, lbls in loader:
+                images = images.to(device)
+                outputs = model(images)
+                probs.extend(outputs.softmax(1)[:, 1].cpu().numpy())  # Probability for AD class
+                labels.extend(lbls.cpu().numpy())
+
+            mean_prob = np.mean(probs)
+            pred_label = 1 if mean_prob >= 0.5 else 0
+            true_label = int(np.round(np.mean(labels)))  # all slices same label ideally
+
+            results[pid] = {"true": true_label, "pred": pred_label, "prob": mean_prob}
+
+            all_true.append(true_label)
+            all_pred.append(pred_label)
+            all_prob.append(mean_prob)
+
+    # --- Compute metrics ---
+    cm = confusion_matrix(all_true, all_pred)
+    report = classification_report(all_true, all_pred, target_names=["NC", "AD"], output_dict=True)
+
+    # ROC + AUC
+    fpr, tpr, _ = roc_curve(all_true, all_prob)
+    roc_auc = auc(fpr, tpr)
+
+    # Plot ROC curve
+    plt.figure()
+    plt.plot(fpr, tpr, color='blue', lw=2, label=f'ROC curve (AUC = {roc_auc:.3f})')
+    plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Per-Patient ROC Curve (AD vs NC)')
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    # Aggregate metrics
+    metrics = {
+        "accuracy": report["accuracy"],
+        "precision_NC": report["NC"]["precision"],
+        "recall_NC": report["NC"]["recall"],
+        "precision_AD": report["AD"]["precision"],
+        "recall_AD": report["AD"]["recall"],
+        "f1_macro": report["macro avg"]["f1-score"],
+        "auc": roc_auc
+    }
+
+    # Print report + confusion matrix
+    print("\n=== Per-Patient Classification Report ===")
+    print(classification_report(all_true, all_pred, target_names=["NC", "AD"]))
+    print("Confusion Matrix:\n", cm)
+    print(f"AUC: {roc_auc:.3f}")
+
+
+
+    return results, metrics
+
+def plot_patient_slices(model, patient_dataset, patient_label_name, device):
+    """
+    Plots 20 slices of a single patient with model predictions and actual labels.
+    """
+    model.eval()
+    fig, axes = plt.subplots(4, 5, figsize=(15, 12))
+    axes = axes.flatten()
+
+    with torch.no_grad():
+        for i in range(len(patient_dataset)):
+            image, label = patient_dataset[i]
+            image = image.unsqueeze(0).to(device)  # add batch dim
+            output = model(image)
+            pred = torch.argmax(output, dim=1).item()
+            prob = torch.softmax(output, dim=1)[0, pred].item()
+
+            img = image.cpu().squeeze().numpy()
+
+            axes[i].imshow(img, cmap='gray')
+            axes[i].axis('off')
+            axes[i].set_title(f"Pred: {'AD' if pred==1 else 'NC'} ({prob:.2f})\nTrue: {patient_label_name}")
+
+    fig.suptitle(f"Predictions and Actual Labels for {patient_label_name} Patient", fontsize=16)
+    plt.tight_layout()
+    plt.show()
+
+
 
 test_ds = ADNIDataset(test_set_location, transform=transform_test)
 patient_datasets, patient_ids = split_dataset_by_patient(test_ds)
@@ -91,5 +205,16 @@ patient_ds = patient_datasets[0]
 print(f"Patient {patient_ids[0]} has {len(patient_ds)} slices")
 
 
+results, metrics = evaluate_per_patient(model, patient_datasets, patient_ids, device)
+
+print(f"\n✅ Patient-Level Accuracy: {metrics['accuracy']:.3f}")
+print(f"✅ Patient-Level AUC: {metrics['auc']:.3f}")
+
+# Find one AD and one NC patient
+ad_patient = next(ds for ds in patient_datasets if ds[0][1] == 1)
+nc_patient = next(ds for ds in patient_datasets if ds[0][1] == 0)
+
+plot_patient_slices(model, ad_patient, "AD", device)
+plot_patient_slices(model, nc_patient, "NC", device)
 
 
