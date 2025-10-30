@@ -2,7 +2,7 @@
 Contains source code for training, validating, testing and saving the model
 """
 
-from dataset import train_dataloader, test_dataloader, split_train, split_val, get_train_and_val
+from dataset import train_dataloader, test_dataloader, split_train, split_val, get_test_and_val
 from modules import convnext_tiny, covnext_small 
 import torch
 import torch.nn as nn
@@ -14,7 +14,8 @@ import time
 import wandb
 import argparse
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
-from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", type=int)
@@ -52,6 +53,10 @@ milestone = config["scheduler"]
 
 final_predictions = []
 final_labels = []
+avg_losses = []
+accuracies = []
+val_accuracies = []
+val_losses = []
 
 
 def training(model, train_loader, val_loader):
@@ -70,17 +75,13 @@ def training(model, train_loader, val_loader):
     scheduler = optim.lr_scheduler.SequentialLR(optimizer, schedulers=[sched_linear, sched_cosine], milestones=[milestone])
     
     total_step = len(train_loader)
-
-    losses = []
-
-    #ema = torch.optim.swa_utils.AveragedModel(model)
-
     
     print("> Training")
     start = time.time() 
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0
+        val_loss = 0
         for i, (images, labels) in enumerate(train_loader):
             images = images.to(device)
             labels = labels.to(device)
@@ -88,6 +89,10 @@ def training(model, train_loader, val_loader):
             #forward pass
             outputs = model(images)
             loss = criterion(outputs, labels)
+
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += predicted.eq(labels).sum().item()
 
             #backward and optimise
             optimizer.zero_grad()
@@ -101,6 +106,7 @@ def training(model, train_loader, val_loader):
         
         avg_loss = epoch_loss / total_step
         #ema.update_parameters(model)
+        avg_losses.append(avg_loss)
         
         print(f"📈 Epoch {epoch+1}/{num_epochs} Complete: Avg Loss = {avg_loss:.4f}")
 
@@ -114,11 +120,13 @@ def training(model, train_loader, val_loader):
                 images = images.to(device)
                 labels = labels.to(device)
 
-                #forward pass
+               #forward pass
                 outputs = model(images)
+                loss = criterion(outputs, labels)
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
+                val_loss += loss.item()
 
             print("Validation accuracy: {} %".format(100 * correct/ total))
             wandb.log({
@@ -127,6 +135,11 @@ def training(model, train_loader, val_loader):
                 "Val_acc": 100*correct/ total,
                 "epoch": epoch,
             })
+        avg_val_loss = val_loss / total_step
+
+        val_losses.append(avg_val_loss)
+        
+
 
 
     
@@ -198,16 +211,16 @@ print(device)
 
 
 
-test_loader = test_dataloader(batch_size)
+train_loader = test_dataloader(batch_size)
 # val_loader = split_val(batch_size)
 # train_loader = split_train(batch_size)
 
-train_loader, val_loader = get_train_and_val(batch_size=batch_size)
+test_loader, val_loader = get_test_and_val(batch_size=batch_size)
 
 wandb.init(
     entity="sophia-gleeson-the-university-of-queensland",
-    project="24-10", # Set your project name
-    config=config, # Log the hyperparameters
+    project="29-10", 
+    config=config, 
     reinit=True)
 
 
@@ -218,9 +231,54 @@ wandb.watch(model, log='all', log_freq=50)
 model, optimizer = training(model, train_loader, val_loader)
 model = test(model, test_loader)
 
-save_model(model, optimizer, filename="convnext_final_model_patients.pth")
+save_model(model, optimizer, filename="convnext_final_model.pth")
 
-# final_labels = torch.cat(label).cpu().numpy()
-# final_predictions = torch.cat(predictions).cpu().numpy()
 
 print(classification_report(final_labels, final_predictions, target_names=["NC", "AD"]))
+cm = confusion_matrix(final_labels, final_predictions)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels = ["NC", "AD"])
+disp.plot()
+plt.title("Confusion Matrix")
+plt.savefig("Confusion_Matrix.png")
+plt.close()
+
+# save loss graph
+plt.figure()
+plt.plot(avg_losses, label="Training loss")
+plt.plot(val_losses, label="Validation Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Training loss & accuracy")
+plt.title("Training loss and accuracy versus epochs")
+plt.legend()
+plt.savefig("train_val_loss.png")
+plt.close()
+
+
+
+# save accuracy graph
+plt.figure()
+plt.plot(accuracies, label="Training Accuracy")
+plt.plot(val_accuracies, label="Validation Accuracy")
+plt.xlabel("Epoch")
+plt.ylabel("Training loss & accuracy")
+plt.title("Training and Validation accuracy versus epochs")
+plt.legend()
+plt.savefig("train_val_accuracy.png")
+plt.close()
+
+
+# save ROC curve
+fpr, tpr, _ = roc_curve(final_labels, final_predictions)
+roc_auc = auc(fpr, tpr)
+
+plt.figure()
+plt.plot(fpr, tpr, color='blue', lw=2, label=f'ROC curve (AUC = {roc_auc:.3f})')
+plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve (AD vs NC)')
+plt.legend(loc="lower right")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("ROC.png")
+plt.close()
