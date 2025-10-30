@@ -139,7 +139,14 @@ def split_dataset_by_patient(dataset, validation_split=0.2, random_seed=60):
     Splits the test dataset into a test and validation set at patient level
 
     Args:
-        dataset
+        dataset (torch.utils.data.Dataset): The dataset containing images
+        validation_split (float, optional): Fraction of unique patients to include in the validation set. Defaults to 0.2.
+        random_seed (int, optional): Seed for reproducible shuffling of patient IDs. Defaults to 60.
+
+    Returns:
+        tuple: A tuple containing:
+            - test_subset (torch.utils.data.Subset): Subset of the dataset for testing.
+            - val_subset (torch.utils.data.Subset): Subset of the dataset for validation.
     """
 
     patient_id_pattern = re.compile(r"^(\d+)_.*")
@@ -189,6 +196,20 @@ def split_dataset_by_patient(dataset, validation_split=0.2, random_seed=60):
     return test_subset, val_subset
 
 def get_test_and_val(batch_size, val_split=0.2, seed=60):
+    """
+    Prepares DataLoaders for the test and validation subsets of the ADNI dataset, 
+    splitting at the patient level to prevent leakage.
+
+    Args:
+        batch_size (int): Number of samples per batch for the DataLoaders.
+        val_split (float, optional): Fraction of patients to include in the validation set. Defaults to 0.2.
+        seed (int, optional): Random seed for reproducibility in splitting. Defaults to 60.
+
+    Returns:
+        tuple: A tuple containing:
+            - test_loader (torch.utils.data.DataLoader): DataLoader for the test set.
+            - val_loader (torch.utils.data.DataLoader): DataLoader for the validation set.
+    """
     dataset = ADNIDataset(root_dir=test_set_location, transform=transform_test)
 
     test_subset, val_subset = split_dataset_by_patient(dataset, val_split)
