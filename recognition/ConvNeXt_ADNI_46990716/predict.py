@@ -4,7 +4,11 @@ Loads trained model and uses test dataset to extract 2 patients, 1 from NC and 1
 
 Performs classification per patient, using the 20 slices per patient.
 
+Outputs classification report, patient level accuracy and auc, ROC curve, classification matrix
+and prediction vs actual labels for 2 patients and their 20 slices for the AD and NC class.
 
+To run:
+    python predict.py
 """
 from dataset import test_dataloader, ADNIDataset, transform_test, test_set_location
 from modules import covnext_small
@@ -184,6 +188,12 @@ def evaluate_per_patient(model, patient_datasets, patient_ids, device, batch_siz
 def plot_patient_slices(model, patient_dataset, patient_label_name, device):
     """
     Plots 20 slices of a single patient with model predictions and actual labels.
+
+    Args:
+        model (torch.nn.Module): The trained model to use for analysis
+        patient_dataset (list[Subset]): per-patient datasets
+        patient_label_name (string): patient class in ADNI dataset
+        device: torch device
     """
     model.eval()
     fig, axes = plt.subplots(4, 5, figsize=(15, 12))
@@ -207,7 +217,7 @@ def plot_patient_slices(model, patient_dataset, patient_label_name, device):
     plt.tight_layout()
     plt.show()
 
-
+# =======================================================================================
 
 test_ds = ADNIDataset(test_set_location, transform=transform_test)
 patient_datasets, patient_ids = split_dataset_by_patient(test_ds)

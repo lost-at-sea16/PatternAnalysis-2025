@@ -1,5 +1,6 @@
 """
-Contains dataloader for loading and preprocessing data
+Implements a custom dataset class and methods to load the test and training set into dataloaders, 
+splits test set into test and validation set in 80:20 split
 """
 import torch
 from torch.utils.data import DataLoader, Dataset, random_split, Subset

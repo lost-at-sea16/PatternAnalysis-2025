@@ -1,38 +1,38 @@
 """
 Contains source code for training, validating, testing and saving the model
+
+Outputs the model accuracy and classification report.
+Saves as plots the validation and training loss, validation accuracy and confusion matrix
+
+To run:
+    python train.py -n 60 -l 0.001 -b 128 -w 0.05 -s 5 -m 0.01 -d 0.1
 """
 
 from dataset import train_dataloader, get_test_and_val
 from modules import covnext_small 
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
-import torchvision.transforms as transforms
 import time
 
 import wandb
 import argparse
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
-from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc, ConfusionMatrixDisplay
+from timm.loss import LabelSmoothingCrossEntropy
+from sklearn.metrics import confusion_matrix, classification_report, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-n", type=int)
-parser.add_argument("-l", type=float)
-parser.add_argument("-b", type=int)
-parser.add_argument("-w", type=float)
-parser.add_argument("-s", type=int)
-parser.add_argument("-m", type=float)
-parser.add_argument("-d", type=float)
+parser.add_argument("-n", type=int) # number of epochs
+parser.add_argument("-l", type=float) # learning rate
+parser.add_argument("-b", type=int) # batch size
+parser.add_argument("-w", type=float) # weight decay
+parser.add_argument("-s", type=int) # milestone for SequentialLR
+parser.add_argument("-m", type=float) # smoothing param for label smoothing cross entropy
+parser.add_argument("-d", type=float) # drop path rate
 
-# -n 60 -l 0.0003 -b 128 -w 0.05 -s 5 -m 0.05 -d 0.0
 
 opts = parser.parse_args()
 
-
-
-
+# dictionary to store this run's hyperparams
 config = {
     "num_epochs": opts.n,
     "learning_rate": opts.l,
@@ -49,7 +49,7 @@ batch_size = config["batch_size"]
 weight_decay = config["weight_decay"]
 milestone = config["scheduler"]
 
-
+# lists for storing predictions, labels, training loss, validation loss, and validation accuracy
 final_predictions = []
 final_labels = []
 train_losses = []
@@ -220,10 +220,8 @@ def save_model(model, optimizer, filename="trained_model/convnext_final_model.pt
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 
-
-
+# load training, testing and validating data loaders
 train_loader = train_dataloader(batch_size)
-
 test_loader, val_loader = get_test_and_val(batch_size=batch_size)
 
 wandb.init(
@@ -237,9 +235,9 @@ model = covnext_small(config["drop_path_rate"]).to(device)
 
 wandb.watch(model, log='all', log_freq=50)
 
+# train, test and save model
 model, optimizer = training(model, train_loader, val_loader)
 model = test(model, test_loader)
-
 save_model(model, optimizer)
 
 # print classification report and confusion matrix

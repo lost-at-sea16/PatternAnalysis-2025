@@ -1,18 +1,10 @@
 """
-
+Contains functions to view image from each class in the ADNI dataset, and to count how many slices each patient
+had in the dataset
 """
 
-from dataset import train_dataloader, test_dataloader, split_train, split_val, ADNIDataset, train_set_location, test_set_location
-from modules import covnext_small
+from dataset import test_dataloader, train_set_location, test_set_location
 import matplotlib.pyplot as plt 
-import torchvision
-import numpy as np
-import torch
-import re
-from sklearn.metrics import classification_report
-import time
-import random
-from torch.utils.data import Subset
 import re
 from collections import defaultdict
 
