@@ -14,13 +14,19 @@ import torch
 import re
 import time
 from torch.utils.data import DataLoader, Subset
-from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc
+from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc, ConfusionMatrixDisplay
 import os
 
-checkpoint_location = r"C:\Users\sophi\OneDrive\Documents\2025\Study\sem 2\comp3710\Assignments\A3\PatternAnalysis-2025\recognition\ConvNeXt_ADNI_46990716\convnext_final_model.pth"
+checkpoint_location = r"/home/Student/s4699071/convnext_final_model.pth"
 
-## load saved model
+
 def load_trained_model():
+    """
+    pretrained ConvNeXt-Small model from a saved checkpoint at checkpoint_location
+
+    Returns:
+        torch.nn.Module: The trained ConvNeXt-Small model
+    """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     loaded_model = covnext_small(drop_path_rate=0.1).to(device)
     checkpoint = torch.load(checkpoint_location)
@@ -163,6 +169,12 @@ def evaluate_per_patient(model, patient_datasets, patient_ids, device, batch_siz
     print("\n=== Per-Patient Classification Report ===")
     print(classification_report(all_true, all_pred, target_names=["NC", "AD"]))
     print("Confusion Matrix:\n", cm)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels = ["NC", "AD"])
+    disp.plot()
+    plt.title("Confusion Matrix")
+    plt.savefig("predict_Confusion_Matrix.png")
+    plt.close()
+
     print(f"AUC: {roc_auc:.3f}")
 
 
@@ -207,8 +219,8 @@ print(f"Patient {patient_ids[0]} has {len(patient_ds)} slices")
 
 results, metrics = evaluate_per_patient(model, patient_datasets, patient_ids, device)
 
-print(f"\n✅ Patient-Level Accuracy: {metrics['accuracy']:.3f}")
-print(f"✅ Patient-Level AUC: {metrics['auc']:.3f}")
+print(f"\n Patient-Level Accuracy: {metrics['accuracy']:.3f}")
+print(f" Patient-Level AUC: {metrics['auc']:.3f}")
 
 # Find one AD and one NC patient
 ad_patient = next(ds for ds in patient_datasets if ds[0][1] == 1)
