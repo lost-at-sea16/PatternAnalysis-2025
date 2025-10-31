@@ -2,8 +2,8 @@
 Contains source code for training, validating, testing and saving the model
 """
 
-from dataset import train_dataloader, test_dataloader, split_train, split_val, get_train_and_val
-from modules import convnext_tiny, covnext_small 
+from dataset import train_dataloader, get_test_and_val
+from modules import covnext_small 
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -60,7 +60,20 @@ val_losses = []
 
 def training(model, train_loader, val_loader):
     """
-    
+    Trains a ConvNeXt model on the ADNI dataset using a combination of linear and cosine learning rate 
+    scheduling, Label Smoothing Cross-Entropy loss, and AdamW optimizer. Validates the model after each 
+    epoch.
+
+    Args:
+        model (torch.nn.Module): The neural network model to be trained.
+        train_loader (torch.utils.data.DataLoader): DataLoader for the training dataset.
+        val_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
+
+    Returns:
+        tuple: 
+            - model (torch.nn.Module): The trained model.
+            - optimizer (torch.optim.Optimizer): The optimizer after training.
+
     """
     criterion = LabelSmoothingCrossEntropy(smoothing=config["smoothing"])
     
@@ -98,7 +111,7 @@ def training(model, train_loader, val_loader):
         avg_loss = epoch_loss / total_step
         train_losses.append(avg_loss)
         
-        print(f"📈 Epoch {epoch+1}/{num_epochs} Complete: Avg Loss = {avg_loss:.4f}")
+        print(f"Epoch {epoch+1}/{num_epochs} Complete: Avg Loss = {avg_loss:.4f}")
 
         print("Validating")
     
@@ -143,7 +156,14 @@ def training(model, train_loader, val_loader):
 
 def test(model, test_loader):
     """
-    
+    Evaluates the trained ConvNeXt model on the test dataset and computes accuracy
+
+    Args:
+        model (torch.nn.Module): The trained model.
+        test_loader (torch.utils.data.DataLoader): DataLoader for the test dataset.
+
+    Returns:
+        torch.nn.Module: The evaluated model.
     """
     print("Testing")
     start = time.time()
@@ -177,9 +197,14 @@ def test(model, test_loader):
     return model
 
 
-def save_model(model, optimizer, filename="convnext_best.pth"):
+def save_model(model, optimizer, filename="trained_model/convnext_final_model.pth"):
     """
     Saves the model's state dictionary and optimizer state.
+
+    Args:
+        model (torch.nn.Module): The trained model to save.
+        optimizer (torch.optim.Optimizer): The optimizer associated with the model.
+        filename (str, optional): Path to save the checkpoint. Defaults to "convnext_final_model.pth".
     """
     print(f"\nSaving model to {filename}...")
     torch.save({
@@ -199,12 +224,12 @@ print(device)
 
 train_loader = train_dataloader(batch_size)
 
-test_loader, val_loader = get_train_and_val(batch_size=batch_size)
+test_loader, val_loader = get_test_and_val(batch_size=batch_size)
 
 wandb.init(
     entity="sophia-gleeson-the-university-of-queensland",
-    project="29-10", # Set your project name
-    config=config, # Log the hyperparameters
+    project="29-10",
+    config=config,
     reinit=True)
 
 
@@ -215,9 +240,9 @@ wandb.watch(model, log='all', log_freq=50)
 model, optimizer = training(model, train_loader, val_loader)
 model = test(model, test_loader)
 
-save_model(model, optimizer, filename="convnext_final_model.pth")
+save_model(model, optimizer)
 
-
+# print classification report and confusion matrix
 print(classification_report(final_labels, final_predictions, target_names=["NC", "AD"]))
 cm = confusion_matrix(final_labels, final_predictions)
 disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels = ["NC", "AD"])
